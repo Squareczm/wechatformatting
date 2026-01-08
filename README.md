@@ -24,69 +24,13 @@
 
 ## 📦 安装
 
-### 方法一：克隆仓库
-
-```bash
-git clone https://github.com/Squareczm/wechatformatting.git
-cd wechatformatting
-```
-
-### 方法二：作为 Claude AI Skill 使用
-
 将整个文件夹放入 Claude 的 skills 目录：
 
 ```bash
 .claude/skills/wechatformatting
 ```
 
-## 🚀 使用方法
 
-### 命令行使用
-
-```bash
-# 基本用法（输出到标准输出）
-python scripts/formatter.py article.md
-
-# 保存为 HTML 文件
-python scripts/formatter.py article.md --save-html
-```
-
-### 标准输入使用
-
-```bash
-# 从管道输入
-cat article.md | python scripts/formatter.py > output.html
-
-# 从文件重定向
-python scripts/formatter.py < article.md > output.html
-```
-
-### 在 Python 中使用
-
-```python
-from formatter import format_markdown
-
-markdown_text = """
-# 文章标题
-
-这是正文内容。
-
-## 二级标题
-
-**重点内容**加粗显示。
-"""
-
-html = format_markdown(markdown_text)
-print(html)
-```
-
-### 微信公众号编辑器使用
-
-1. 将生成的 HTML 代码复制
-2. 打开 [微信公众号平台](https://mp.weixin.qq.com/)
-3. 创建新文章，点击顶部 **「源码」** 按钮（`<>` 图标）
-4. 粘贴 HTML 代码
-5. 再次点击「源码」按钮预览效果
 
 ## 📝 Markdown 格式规范
 
