@@ -145,7 +145,14 @@ def generate_list_item(content: str) -> str:
 
 def generate_code_block(content: str) -> str:
     """代码块"""
-    return f'<pre style="margin: 16px 0; padding: 16px; background: #1f2937; border-radius: 6px; overflow-x: auto; font-family: "SF Mono", "Fira Code", monospace; font-size: 14px; line-height: 1.6; color: #e5e7eb;">{content}</pre>'
+    # 微信编辑器里深色代码块不太利于阅读，这里用浅底+细边框
+    return (
+        f'<pre style="margin: 16px 0; padding: 14px 16px; background: {BG_QUOTE}; '
+        f'border: 1px solid {BORDER_COLOR}; border-radius: 6px; overflow-x: auto; '
+        f'white-space: pre-wrap; word-break: break-word; '
+        f'font-family: \\"SF Mono\\", \\"Fira Code\\", monospace; font-size: 13px; '
+        f'line-height: 1.7; color: #111827;">{content}</pre>'
+    )
 
 
 def generate_image(alt_text: str, img_url: str) -> str:
@@ -155,22 +162,49 @@ def generate_image(alt_text: str, img_url: str) -> str:
 
 def generate_link(text: str, url: str) -> str:
     """链接"""
-    return f"<p style='margin: 8px 0; font-size: 16px; line-height: 1.8; color: {TEXT_COLOR};'><a href='{escape_html(url)}' style='color: {THEME_COLOR}; text-decoration: none;'>{escape_html(text)}</a></p>"
+    # text 允许包含格式化后的 HTML（strong/code），因此这里不再 escape text，只 escape url
+    return (
+        f"<p style='margin: 8px 0; font-size: 16px; line-height: 1.8; color: {TEXT_COLOR};'>"
+        f"<a href='{escape_html(url)}' style='color: {THEME_COLOR}; text-decoration: none;'>"
+        f"{text}"
+        f"</a></p>"
+    )
 
 
-def format_strong(text: str) -> str:
-    """处理加粗文本"""
-    result = escape_html(text)
-    result = re.sub(r'\*\*([^*]+)\*\*', r'<strong style="color: {0}; font-weight: 600;">\1</strong>'.format(THEME_COLOR), result)
-    result = re.sub(r'__([^_]+)__', r'<strong style="color: {0}; font-weight: 600;">\1</strong>'.format(THEME_COLOR), result)
+def format_strong_escaped(text: str) -> str:
+    """处理加粗文本（输入必须已经 escape_html）"""
+    result = text
+    result = re.sub(
+        r'\*\*([^*]+)\*\*',
+        r'<strong style="color: {0}; font-weight: 600;">\1</strong>'.format(THEME_COLOR),
+        result,
+    )
+    result = re.sub(
+        r'__([^_]+)__',
+        r'<strong style="color: {0}; font-weight: 600;">\1</strong>'.format(THEME_COLOR),
+        result,
+    )
     return result
 
 
-def format_inline_code(text: str) -> str:
-    """处理行内代码"""
-    result = escape_html(text)
-    result = re.sub(r'`([^`]+)`', r'<code style="background: {0}; padding: 2px 6px; border-radius: 4px; font-family: "SF Mono", "Fira Code", monospace; font-size: 13px; color: #1f293b;">{1}</code>'.format(BG_QUOTE, r'\1'), result)
-    return result
+def format_inline_code_escaped(text: str) -> str:
+    """处理行内代码（输入必须已经 escape_html）"""
+    # 关键点：不要在这里再 escape，否则会把 <code> 再次转义成 &lt;code&gt;
+    return re.sub(
+        r'`([^`]+)`',
+        r'<code style="background: {0}; padding: 2px 6px; border-radius: 4px; '
+        r'font-family: "SF Mono", "Fira Code", monospace; font-size: 13px; '
+        r'color: #1f293b;">\1</code>'.format(BG_QUOTE),
+        text,
+    )
+
+
+def format_text(text: str) -> str:
+    """统一的行内格式化：先转义，再处理 code，再处理加粗"""
+    escaped = escape_html(text)
+    escaped = format_inline_code_escaped(escaped)
+    escaped = format_strong_escaped(escaped)
+    return escaped
 
 
 # ============================================================================
@@ -246,7 +280,7 @@ def process_markdown(content: str) -> str:
                 formatted_parts = []
                 for part in content_parts:
                     if part.strip():
-                        formatted_parts.append(format_strong(format_inline_code(part)))
+                        formatted_parts.append(format_text(part))
                     else:
                         formatted_parts.append("__PARAGRAPH_BREAK__")
                 
@@ -261,9 +295,9 @@ def process_markdown(content: str) -> str:
         
         # 检测列表
         elif line.startswith("- ") or line.startswith("* "):
-            html_lines.append(generate_list_item(format_strong(format_inline_code(line))))
+            html_lines.append(generate_list_item(format_text(line)))
         elif re.match(r"^\d+\.\s", line):
-            html_lines.append(generate_list_item(format_strong(format_inline_code(line))))
+            html_lines.append(generate_list_item(format_text(line)))
         
         # 检测代码块
         elif line.startswith("```"):
@@ -274,6 +308,9 @@ def process_markdown(content: str) -> str:
                 i += 1
             code_content = "<br>".join(code_lines)
             html_lines.append(generate_code_block(code_content))
+            # 跳过结束的 ``` 行，避免把结束标记当作下一个代码块开头
+            if i < len(lines) and lines[i].startswith("```"):
+                i += 1
             continue
         
         # 检测图片
@@ -284,7 +321,7 @@ def process_markdown(content: str) -> str:
                 img_url = img_match.group(2)
                 html_lines.append(generate_image(alt_text, img_url))
             else:
-                html_lines.append(generate_paragraph(format_strong(format_inline_code(line))))
+                html_lines.append(generate_paragraph(format_text(line)))
         
         # 检测链接
         elif line.startswith("[") and "](" in line:
@@ -292,13 +329,13 @@ def process_markdown(content: str) -> str:
             if link_match:
                 link_text = link_match.group(1)
                 link_url = link_match.group(2)
-                html_lines.append(generate_link(format_strong(link_text), link_url))
+                html_lines.append(generate_link(format_text(link_text), link_url))
             else:
-                html_lines.append(generate_paragraph(format_strong(format_inline_code(line))))
+                html_lines.append(generate_paragraph(format_text(line)))
         
         # 普通段落
         else:
-            formatted_content = format_strong(format_inline_code(line))
+            formatted_content = format_text(line)
             html_lines.append(generate_paragraph(formatted_content))
         
         i += 1
