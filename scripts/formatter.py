@@ -110,8 +110,20 @@ def generate_special_title(title: str) -> str:
 
 
 def generate_blockquote(content: str) -> str:
-    """引用块"""
-    return f'''<blockquote style="margin: 16px 0; padding: 12px 16px; background: {BG_QUOTE}; border-left: 3px solid {THEME_COLOR};">
+    """引用块 - 支持多个段落"""
+    # 如果内容包含段落分隔符，分割成多个段落
+    if "__PARAGRAPH_BREAK__" in content:
+        paragraphs = content.split("__PARAGRAPH_BREAK__")
+        paragraph_html = []
+        for para in paragraphs:
+            if para.strip():
+                paragraph_html.append(f'<p style="margin: 8px 0; font-size: 15px; line-height: 1.8; color: {TEXT_LIGHT};">{para.strip()}</p>')
+        paragraphs_content = "".join(paragraph_html)
+        return f'''<blockquote style="margin: 16px 0; padding: 12px 16px; background: {BG_QUOTE}; border-left: 3px solid {THEME_COLOR};">
+    {paragraphs_content}
+</blockquote>'''
+    else:
+        return f'''<blockquote style="margin: 16px 0; padding: 12px 16px; background: {BG_QUOTE}; border-left: 3px solid {THEME_COLOR};">
     <p style="margin: 0; font-size: 15px; line-height: 1.8; color: {TEXT_LIGHT};">{content}</p>
 </blockquote>'''
 
@@ -191,13 +203,56 @@ def process_markdown(content: str) -> str:
             html_lines.append(generate_special_title(line.strip()))
         
         # 检测引用块
-        elif line.startswith("> "):
-            blockquote_content = [line[2:]]
-            i += 1
-            while i < len(lines) and lines[i].startswith("> "):
-                blockquote_content.append(lines[i][2:])
-                i += 1
-            html_lines.append(generate_blockquote(escape_html(" ".join(blockquote_content))))
+        elif line.startswith(">"):
+            blockquote_lines = []
+            # 收集所有引用块行（包括空行）
+            while i < len(lines):
+                current_line = lines[i].rstrip()
+                if current_line.startswith(">"):
+                    # 提取内容（去掉 > 或 > 后的空格）
+                    if current_line.startswith("> "):
+                        blockquote_lines.append(current_line[2:])
+                    elif current_line == ">":
+                        blockquote_lines.append("")  # 空行，保留用于段落分隔
+                    else:
+                        # 以 > 开头但后面没有空格的情况
+                        blockquote_lines.append(current_line[1:])
+                    i += 1
+                elif not current_line:
+                    # 遇到空行，结束引用块
+                    break
+                else:
+                    # 遇到非引用块内容，结束引用块
+                    break
+            
+            # 合并内容：过滤掉连续的空行，保留单个空行作为段落分隔
+            content_parts = []
+            prev_empty = False
+            for part in blockquote_lines:
+                if part.strip():
+                    content_parts.append(part)
+                    prev_empty = False
+                elif not prev_empty:
+                    # 只保留第一个空行作为段落分隔
+                    content_parts.append("")
+                    prev_empty = True
+            
+            # 过滤掉末尾的空行
+            while content_parts and not content_parts[-1].strip():
+                content_parts.pop()
+            
+            if content_parts:
+                # 处理每个段落：先格式化加粗和代码，然后用特殊标记分隔
+                formatted_parts = []
+                for part in content_parts:
+                    if part.strip():
+                        formatted_parts.append(format_strong(format_inline_code(part)))
+                    else:
+                        formatted_parts.append("__PARAGRAPH_BREAK__")
+                
+                # 用段落分隔符连接
+                content = "__PARAGRAPH_BREAK__".join(formatted_parts)
+                html_lines.append(generate_blockquote(content))
             continue
         
         # 检测分割线
